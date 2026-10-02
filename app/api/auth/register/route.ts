@@ -1,42 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db";
-import { hashPassword, signToken } from "@/lib/auth";
+import { createSupabaseClient } from "@/lib/supabase";
 import { registerSchema } from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
   let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
+  try { body = await req.json(); } catch {
     return NextResponse.json({ ok: false, message: "Invalid request body." }, { status: 400 });
   }
-
   const parsed = registerSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input." }, { status: 400 });
-  }
+  if (!parsed.success) return NextResponse.json({ ok: false, message: parsed.error.issues[0]?.message ?? "Invalid input." }, { status: 400 });
+
   const { name, email, password } = parsed.data;
-
   try {
-    const existing = await sql`SELECT id FROM users WHERE email = ${email}`;
-    if (existing.length > 0) {
-      return NextResponse.json({ ok: false, message: "An account with this email already exists." }, { status: 409 });
+    const supabase = createSupabaseClient();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
+    if (error) {
+      const duplicate = /already registered|already exists/i.test(error.message);
+      return NextResponse.json({ ok: false, message: duplicate ? "An account with this email already exists." : error.message }, { status: duplicate ? 409 : 400 });
     }
+    if (!data.user) return NextResponse.json({ ok: false, message: "We couldn't create your account. Please try again." }, { status: 500 });
 
-    const passwordHash = await hashPassword(password);
-    const rows = await sql`
-      INSERT INTO users (name, email, password_hash)
-      VALUES (${name}, ${email}, ${passwordHash})
-      RETURNING id, name, email, budget
-    `;
-    const user = rows[0];
-    const token = signToken({ userId: user.id, email: user.email });
-
+    const account = { id: data.user.id, name, email: data.user.email ?? email, budget: 5000 };
     return NextResponse.json({
       ok: true,
-      token,
-      account: { id: user.id, name: user.name, email: user.email, budget: Number(user.budget) },
-    });
+      token: data.session?.access_token ?? "",
+      refreshToken: data.session?.refresh_token ?? "",
+      requiresEmailConfirmation: !data.session,
+      account,
+    }, { status: 201 });
   } catch (err) {
     console.error("register error", err);
     return NextResponse.json({ ok: false, message: "We couldn't create your account. Please try again." }, { status: 500 });

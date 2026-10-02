@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { sql } from "@/lib/db";
-import { getAuthUser } from "@/lib/auth";
+import { getAuthContext } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  const auth = getAuthUser(req);
+  const auth = await getAuthContext(req);
   if (!auth) return NextResponse.json({ ok: false, message: "Not signed in." }, { status: 401 });
-
   try {
-    const rows = await sql`SELECT id, name, email, budget FROM users WHERE id = ${auth.userId}`;
-    const user = rows[0];
-    if (!user) return NextResponse.json({ ok: false, message: "Account no longer exists." }, { status: 401 });
-
-    return NextResponse.json({
-      ok: true,
-      account: { id: user.id, name: user.name, email: user.email, budget: Number(user.budget) },
-    });
+    const { data: profile, error } = await auth.client.from("profiles").select("name, budget").eq("id", auth.user.id).maybeSingle();
+    if (error) throw error;
+    return NextResponse.json({ ok: true, account: { id: auth.user.id, name: profile?.name ?? auth.user.user_metadata?.name ?? "", email: auth.user.email ?? "", budget: Number(profile?.budget ?? 5000) } });
   } catch (err) {
     console.error("me error", err);
     return NextResponse.json({ ok: false, message: "Something went wrong." }, { status: 500 });

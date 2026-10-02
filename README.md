@@ -1,78 +1,58 @@
 # Ledgerly Backend
 
-A small backend for the Ledgerly app: accounts (register/login) and expense sync,
-backed by Postgres and deployable on Vercel.
+Next.js API backend for the Ledgerly Android app, powered by **Supabase Auth** and **Supabase Postgres with Row Level Security (RLS)**.
 
-## What this is
+## API contract
 
-- **Auth**: `/api/auth/register`, `/api/auth/login`, `/api/auth/me` — passwords are
-  hashed with bcrypt before they ever touch the database. A JWT is issued on
-  register/login and must be sent as `Authorization: Bearer <token>` on every other request.
-- **Data**: `/api/expenses` (list/create), `/api/expenses/:id` (update/delete),
-  `/api/budget` (update) — all scoped to the signed-in user via the token, so one
-  account can never read or modify another account's data.
-- **Database**: Postgres (recommended: [Neon](https://neon.tech), which has a free
-  tier and a one-click Vercel integration).
+The Android app can continue using the existing endpoints:
 
-## Deploy steps
+- `POST /api/auth/register` — creates a Supabase Auth account and returns an access token when email confirmation is disabled.
+- `POST /api/auth/login` — signs in with Supabase Auth and returns an access token.
+- `GET /api/auth/me` — validates the bearer token and returns the profile.
+- `GET|POST /api/expenses` — list or create the signed-in user's expenses.
+- `PUT|DELETE /api/expenses/:id` — update or delete one of the signed-in user's expenses.
+- `PUT /api/budget` — update the signed-in user's budget.
 
-### 1. Create the database
+All protected routes require:
 
-In your Vercel project dashboard: **Storage** tab → **Create Database** → **Neon** →
-follow the prompts. This automatically sets the `DATABASE_URL` environment variable
-for you.
-
-(If you'd rather use your own Postgres/Supabase/etc., just set `DATABASE_URL`
-yourself in Project Settings → Environment Variables — any standard Postgres
-connection string works.)
-
-### 2. Run the schema migration
-
-Open the Neon dashboard → **SQL Editor**, paste the contents of
-`migrations/001_init.sql`, and run it. This creates the `users` and `expenses` tables.
-
-(You only need to do this once, and again any time you add a new migration file.)
-
-### 3. Set the JWT secret
-
-In Vercel → Project Settings → Environment Variables, add:
-
-```
-JWT_SECRET=<any long random string>
+```http
+Authorization: Bearer <supabase-access-token>
 ```
 
-Generate one locally with `openssl rand -base64 48`, or just mash the keyboard for 40+ characters.
+## Supabase setup
 
-### 4. Deploy
+1. Create a project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor** and run [`migrations/001_supabase.sql`](migrations/001_supabase.sql).
+3. In **Authentication -> Providers -> Email**, choose whether to require email confirmation. For the current Android login flow, disable confirmation during initial testing, or update the app to show the confirmation state returned by registration.
+4. Copy the project URL and publishable/anon key from **Project Settings -> API**.
+5. Configure these Vercel environment variables:
 
-Push this folder to a GitHub repo and import it in Vercel, or run:
-
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-publishable-or-anon-key
 ```
-npm install -g vercel
-vercel
-```
 
-from inside this folder. Vercel auto-detects Next.js and deploys it.
-
-### 5. Point the app at it
-
-In the Ledgerly Android app, set the API base URL to your deployed Vercel URL (e.g.
-`https://your-project.vercel.app`) — see `EXPO_PUBLIC_API_URL` in the app's `.env`.
+6. Deploy the repository to Vercel. No database password, custom JWT secret, or service-role key is needed by this API.
 
 ## Local development
 
-```
+```bash
 npm install
-cp .env.example .env.local   # fill in DATABASE_URL and JWT_SECRET
+cp .env.example .env.local
 npm run dev
 ```
 
-## Notes on security
+Set real Supabase values in `.env.local` before calling the protected routes.
 
-- Passwords are never stored in plaintext — only bcrypt hashes.
-- Tokens expire after 90 days (adjust in `lib/auth.ts` if you want shorter sessions).
-- Every data endpoint checks the token and scopes queries to that user's `id` —
-  there's no way to fetch or edit another user's expenses even by guessing an ID.
-- This is a solid setup for a personal/small-scale app. If you later need password
-  reset flows, email verification, or rate limiting on login attempts, those aren't
-  included yet — say the word and I'll add them.
+## Security model
+
+- Supabase Auth hashes and manages passwords, sessions, token expiry, email confirmation, and recovery flows.
+- The API validates every bearer token with Supabase Auth.
+- The API uses a request-scoped Supabase client with the user's token.
+- RLS policies enforce that profiles and expenses can only be accessed by their owner, independently of API filtering.
+- The service-role key is intentionally not used or required.
+- Never commit `.env.local` or any Supabase secret key.
+
+## Android migration note
+
+The existing API response shape is preserved. The `token` field is now a Supabase access token instead of a custom JWT. Store the accompanying `refreshToken` and refresh the session before the access token expires. Existing expense and budget request paths remain unchanged.
