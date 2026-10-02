@@ -8,6 +8,7 @@ The Android app can continue using the existing endpoints:
 
 - `POST /api/auth/register` — creates a Supabase Auth account and returns an access token when email confirmation is disabled.
 - `POST /api/auth/login` — signs in with Supabase Auth and returns an access token.
+- `POST /api/auth/google` — exchanges a native Google ID token for a Supabase session.
 - `GET /api/auth/me` — validates the bearer token and returns the profile.
 - `GET|POST /api/expenses` — list or create the signed-in user's expenses.
 - `PUT|DELETE /api/expenses/:id` — update or delete one of the signed-in user's expenses.
@@ -56,3 +57,19 @@ Set real Supabase values in `.env.local` before calling the protected routes.
 ## Android migration note
 
 The existing API response shape is preserved. The `token` field is now a Supabase access token instead of a custom JWT. Store the accompanying `refreshToken` and refresh the session before the access token expires. Existing expense and budget request paths remain unchanged.
+
+## Google sign-in setup
+
+The Android app uses the native Google Sign-In SDK to obtain a Google ID token, then sends that token to `POST /api/auth/google`. Supabase exchanges and verifies the token, creates or finds the user, and returns the normal Ledgerly session response.
+
+Before testing Google login:
+
+1. In Google Cloud Console, configure the OAuth consent screen with the `openid`, `userinfo.email`, and `userinfo.profile` scopes.
+2. Create a **Web application** OAuth client ID. The Web client ID is required in the Android app as `webClientId`.
+3. Create an **Android** OAuth client ID using application ID `expense.tracker.group6` and the SHA-1 fingerprint of the debug/release signing key used to build the app.
+4. In Supabase Dashboard, open **Authentication -> Providers -> Google**, enable Google, and configure the Web client ID and client secret. If Supabase asks for multiple client IDs, list the Web client ID first, followed by Android client IDs.
+5. Set the same Google provider configuration for the Supabase project used by this backend.
+6. In the Android app, replace `YOUR_WEB_CLIENT_ID.apps.googleusercontent.com` in `src/config.ts` with the Web client ID.
+7. Update `API_BASE_URL` in `src/config.ts` to the deployed Ledgerly-Backend URL before creating the production APK.
+
+The current implementation uses the public/free `@react-native-google-signin/google-signin` package. Native Google login requires a real Google Cloud OAuth configuration; the placeholder in `src/config.ts` intentionally prevents an unconfigured login attempt.

@@ -10,6 +10,9 @@ export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email"),
   password: z.string().min(1, "Password is required"),
 });
+export const googleTokenSchema = z.object({
+  idToken: z.string().trim().min(1, "Google sign-in token is required"),
+});
 
 export const categories = ["Food", "Transport", "School", "Shopping", "Bills", "Fun", "Health", "Other"] as const;
 export const payments = ["Cash", "GCash", "Card", "Bank"] as const;
