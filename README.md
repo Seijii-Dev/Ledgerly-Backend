@@ -58,6 +58,10 @@ Set real Supabase values in `.env.local` before calling the protected routes.
 
 The existing API response shape is preserved. The `token` field is now a Supabase access token instead of a custom JWT. Store the accompanying `refreshToken` and refresh the session before the access token expires. Existing expense and budget request paths remain unchanged.
 
+## Deployment
+
+This backend is intended to deploy from the `main` branch on Vercel. Configure `SUPABASE_URL` and `SUPABASE_ANON_KEY` as Vercel Production environment variables.
+
 ## Google sign-in setup
 
 The Android app uses the native Google Sign-In SDK to obtain a Google ID token, then sends that token to `POST /api/auth/google`. Supabase exchanges and verifies the token, creates or finds the user, and returns the normal Ledgerly session response.
